@@ -1,9 +1,14 @@
 use std::alloc::System;
 use std::any::TypeId;
-use std::collections::BTreeMap;
+use std::borrow::BorrowMut;
+use std::cell::RefCell;
+use std::collections::{BTreeMap, HashMap};
 use std::error::Error;
 use std::fmt::Debug;
-use tracing::{Event, Id, Instrument, Metadata, Subscriber};
+use std::rc::Rc;
+use std::sync::{Arc, RwLock, RwLockReadGuard};
+use std::sync::atomic::AtomicUsize;
+use tracing::{Dispatch, Event, Id, Instrument, Metadata, Subscriber};
 use tracing::field::Field;
 use tracing::level_filters::LevelFilter;
 use tracing::span::{Attributes, Record};
@@ -16,27 +21,41 @@ use std::time::{SystemTime};
 use chrono::prelude::*;
 use crate::logs::LogStream;
 
-
 pub struct RunResult {
     logs: LogStream,
 }
 
-impl Default for RunResult {
-    fn default() -> Self {
-        Self {
-            logs: LogStream::default()
+#[derive(Clone)]
+pub struct Logs(Arc<RwLock<Vec<String>>>);
+
+impl Logs {
+    pub fn read(&self) {
+        for item in self.0.read().unwrap().iter() {
+            println!("{}", item);
         }
     }
 }
 
+pub struct CustomLayer {
+    logs: Logs,
+}
 
-pub struct CustomLayer;
+impl CustomLayer {
+    pub fn new() -> (Self, Logs) {
+        let logs = Logs(Arc::new(RwLock::new(vec![])));
+        let layer = CustomLayer {
+            logs: logs.clone(),
+        };
+        (layer, logs)
+    }
+}
+
 
 #[derive(Debug)]
-struct CustomFieldStorage(Vec<BTreeMap<String, serde_json::Value>>);
+struct CustomFieldStorage(Vec<BTreeMap<String, String>>);
 
 #[derive(Debug)]
-struct Visitor<'a>(&'a mut BTreeMap<String, serde_json::Value>);
+struct Visitor<'a>(&'a mut BTreeMap<String, String>);
 
 impl<S> Layer<S> for CustomLayer
     where
@@ -46,6 +65,7 @@ impl<S> Layer<S> for CustomLayer
     fn on_new_span(&self, attrs: &Attributes<'_>, id: &Id, ctx: Context<'_, S>) {
         let mut fields = BTreeMap::new();
         let mut visitor = Visitor(&mut fields);
+        visitor.0.insert("time".to_string(), Utc::now().to_string());
         attrs.record(&mut visitor);
 
         let mut storageArray = Vec::new();
@@ -64,15 +84,15 @@ impl<S> Layer<S> for CustomLayer
         ctx: Context<'_, S>,
     ) {
         let span = ctx.span(id).unwrap();
-        println!("{:?}", values);
         let mut extensions_mut = span.extensions_mut();
         let custom_field_storage: &mut CustomFieldStorage =
             extensions_mut.get_mut::<CustomFieldStorage>().unwrap();
-        let mut json_array_data: &mut Vec<BTreeMap<String, serde_json::Value>> = &mut custom_field_storage.0;
+        let mut json_array_data: &mut Vec<BTreeMap<String, String>> = &mut custom_field_storage.0;
 
-        let mut fields:  BTreeMap<String, serde_json::Value> =  BTreeMap::new();
+        let mut fields:  BTreeMap<String, String> =  BTreeMap::new();
 
         let mut visitor = Visitor(&mut fields);
+        visitor.0.insert("time".to_string(), Utc::now().to_string());
         values.record(&mut visitor);
 
         json_array_data.push(fields);
@@ -85,16 +105,15 @@ impl<S> Layer<S> for CustomLayer
             let mut extensions_mut = span.extensions_mut();
             let custom_field_storage: &mut CustomFieldStorage =
                 extensions_mut.get_mut::<CustomFieldStorage>().unwrap();
-            let mut json_array_data: &mut Vec<BTreeMap<String, serde_json::Value>> = &mut custom_field_storage.0;
+            let mut json_array_data: &mut Vec<BTreeMap<String, String>> = &mut custom_field_storage.0;
 
-            let mut fields:  BTreeMap<String, serde_json::Value> =  BTreeMap::new();
+            let mut fields:  BTreeMap<String, String> =  BTreeMap::new();
 
             let mut visitor = Visitor(&mut fields);
-            visitor.0.insert("level".to_string(), serde_json::json!(format!("{:?}",event.metadata().level())));
-            visitor.0.insert("line".to_string(), serde_json::json!(event.metadata().line()));
-            visitor.0.insert("file".to_string(), serde_json::json!(event.metadata().file()));
-            visitor.0.insert("time".to_string(), serde_json::json!(format!("{:?}", Utc::now())));
-
+            visitor.0.insert("level".to_string(), event.metadata().level().to_string());
+            visitor.0.insert("line".to_string(), event.metadata().line().unwrap().to_string());
+            visitor.0.insert("file".to_string(), event.metadata().file().unwrap().to_string());
+            visitor.0.insert("time".to_string(), Utc::now().to_string());
 
             event.record(&mut visitor);
             json_array_data.push(fields);
@@ -107,55 +126,56 @@ impl<S> Layer<S> for CustomLayer
         let storage= extensions
             .get::<CustomFieldStorage>()
             .expect("storage not found");
-        println!("Closing span and has recorded {:#?}", storage);
-        // self.logger.push("hello World".to_string());
-
+        let mut log = self.logs.0.write().unwrap();
+        for item in &storage.0 {
+            log.push(format!("{:?}", item));
+        }
     }
 }
 
 impl<'a> tracing::field::Visit for Visitor<'a> {
     fn record_f64(&mut self, field: &Field, value: f64) {
         self.0
-            .insert(field.name().to_string(), serde_json::json!(value));
+            .insert(field.name().to_string(), value.to_string());
     }
 
     fn record_i64(&mut self, field: &Field, value: i64) {
         self.0
-            .insert(field.name().to_string(), serde_json::json!(value));
+            .insert(field.name().to_string(), value.to_string());
     }
 
     fn record_u64(&mut self, field: &Field, value: u64) {
         self.0
-            .insert(field.name().to_string(), serde_json::json!(value));
+            .insert(field.name().to_string(), value.to_string());
     }
 
     fn record_i128(&mut self, field: &Field, value: i128) {
         self.0
-            .insert(field.name().to_string(), serde_json::json!(value));
+            .insert(field.name().to_string(), value.to_string());
     }
 
     fn record_u128(&mut self, field: &Field, value: u128) {
         self.0
-            .insert(field.name().to_string(), serde_json::json!(value));
+            .insert(field.name().to_string(), value.to_string());
     }
 
     fn record_bool(&mut self, field: &Field, value: bool) {
         self.0
-            .insert(field.name().to_string(), serde_json::json!(value));
+            .insert(field.name().to_string(), value.to_string());
     }
 
     fn record_str(&mut self, field: &Field, value: &str) {
         self.0
-            .insert(field.name().to_string(), serde_json::json!(value));
+            .insert(field.name().to_string(), value.to_string());
     }
 
     fn record_error(&mut self, field: &Field, value: &(dyn Error + 'static)) {
         self.0
-            .insert(field.name().to_string(), serde_json::json!(format!("{:?}",value)));
+            .insert(field.name().to_string(), value.to_string());
     }
 
     fn record_debug(&mut self, field: &Field, value: &dyn Debug) {
         self.0
-            .insert(field.name().to_string(), serde_json::json!(format!("{:?}",value)));
+            .insert(field.name().to_string(), format!("{:?}", value));
     }
 }
