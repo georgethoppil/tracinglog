@@ -1,18 +1,12 @@
 mod custom_layer;
 
-use std::env::temp_dir;
-use std::io;
-use lazy_static::lazy_static;
-use tracing::{debug, error, event, info, info_span, Level, span, Subscriber};
-use tracing::field::debug;
-use tracing::instrument::WithSubscriber;
-use tracing_subscriber::fmt;
+use tracing::{debug, error, event, info, Level, span};
 use crate::custom_layer::{CustomLayer};
 use tracing_subscriber::prelude::*;
 
 fn main() {
-    let (customLayer, logs) = CustomLayer::new();
-    tracing_subscriber::registry().with(customLayer).init();
+    let (custom_layer, logs) = CustomLayer::new();
+    tracing_subscriber::registry().with(custom_layer).init();
     let span = span!(Level::INFO, "doing_something", level = 1, field="5").entered();
     span.record("field", "90");
     info!("Test {}", 5);

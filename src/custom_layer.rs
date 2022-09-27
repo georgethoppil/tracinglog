@@ -1,23 +1,13 @@
-use std::alloc::System;
-use std::any::TypeId;
-use std::borrow::BorrowMut;
-use std::cell::RefCell;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap};
 use std::error::Error;
 use std::fmt::Debug;
-use std::rc::Rc;
-use std::sync::{Arc, RwLock, RwLockReadGuard};
-use std::sync::atomic::AtomicUsize;
-use tracing::{Dispatch, Event, Id, Instrument, Metadata, Subscriber};
+use std::sync::{Arc, RwLock};
+use tracing::{Event, Id, Subscriber};
 use tracing::field::Field;
-use tracing::level_filters::LevelFilter;
 use tracing::span::{Attributes, Record};
-use tracing::subscriber::Interest;
-use tracing_subscriber::filter::Filtered;
 use tracing_subscriber::Layer;
-use tracing_subscriber::layer::{Context, Filter, Layered};
+use tracing_subscriber::layer::{Context};
 use tracing_subscriber::registry::LookupSpan;
-use std::time::{SystemTime};
 use chrono::prelude::*;
 
 #[derive(Clone)]
@@ -63,9 +53,9 @@ impl<S> Layer<S> for CustomLayer
         visitor.0.insert("time".to_string(), Utc::now().to_string());
         attrs.record(&mut visitor);
 
-        let mut storageArray = Vec::new();
-        storageArray.push(fields);
-        let storage = CustomFieldStorage(storageArray);
+        let mut storage_array = Vec::new();
+        storage_array.push(fields);
+        let storage = CustomFieldStorage(storage_array);
 
         let span = ctx.span(id).unwrap();
         let mut extensions = span.extensions_mut();
@@ -82,7 +72,7 @@ impl<S> Layer<S> for CustomLayer
         let mut extensions_mut = span.extensions_mut();
         let custom_field_storage: &mut CustomFieldStorage =
             extensions_mut.get_mut::<CustomFieldStorage>().unwrap();
-        let mut json_array_data: &mut Vec<BTreeMap<String, String>> = &mut custom_field_storage.0;
+        let json_array_data: &mut Vec<BTreeMap<String, String>> = &mut custom_field_storage.0;
 
         let mut fields:  BTreeMap<String, String> =  BTreeMap::new();
 
@@ -100,7 +90,7 @@ impl<S> Layer<S> for CustomLayer
             let mut extensions_mut = span.extensions_mut();
             let custom_field_storage: &mut CustomFieldStorage =
                 extensions_mut.get_mut::<CustomFieldStorage>().unwrap();
-            let mut json_array_data: &mut Vec<BTreeMap<String, String>> = &mut custom_field_storage.0;
+            let json_array_data: &mut Vec<BTreeMap<String, String>> = &mut custom_field_storage.0;
 
             let mut fields:  BTreeMap<String, String> =  BTreeMap::new();
 
