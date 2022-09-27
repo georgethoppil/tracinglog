@@ -19,11 +19,6 @@ use tracing_subscriber::layer::{Context, Filter, Layered};
 use tracing_subscriber::registry::LookupSpan;
 use std::time::{SystemTime};
 use chrono::prelude::*;
-use crate::logs::LogStream;
-
-pub struct RunResult {
-    logs: LogStream,
-}
 
 #[derive(Clone)]
 pub struct Logs(Arc<RwLock<Vec<String>>>);
