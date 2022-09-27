@@ -12,7 +12,8 @@ use crate::custom_layer::{CustomLayer, RunResult};
 use tracing_subscriber::prelude::*;
 
 fn main() {
-    tracing_subscriber::registry().with(CustomLayer).init();
+    let (customLayer, logs) = CustomLayer::new();
+    tracing_subscriber::registry().with(customLayer).init();
     let span = span!(Level::INFO, "doing_something", level = 1, field="5").entered();
     span.record("field", "90");
     info!("Test {}", 5);
@@ -22,17 +23,8 @@ fn main() {
     event!(Level::INFO, answer_two = 50);
     event!(Level::ERROR, error_tag = "We got an error boss");
     event!(Level::TRACE, trace_tag = "Some tag");
-    // customerLayer.append_logs_to_run_result(runResult);
     span.exit();
 
-    let subscriber = tracing_subscriber::fmt()
-        .with_max_level(tracing::Level::DEBUG)
-        .finish();
+    logs.read();
 
-    let s = tracing::subscriber::with_default(subscriber, || {
-        event!(Level::INFO, answer_two = 50);
-        event!(Level::ERROR, error_tag = "We got an error boss");
-        // println!("{:?}", subscriber.current_span().metadata());
-        "done"
-    });
 }
