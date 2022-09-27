@@ -1,5 +1,4 @@
 mod custom_layer;
-mod logs;
 
 use std::env::temp_dir;
 use std::io;
@@ -8,7 +7,7 @@ use tracing::{debug, error, event, info, info_span, Level, span, Subscriber};
 use tracing::field::debug;
 use tracing::instrument::WithSubscriber;
 use tracing_subscriber::fmt;
-use crate::custom_layer::{CustomLayer, RunResult};
+use crate::custom_layer::{CustomLayer};
 use tracing_subscriber::prelude::*;
 
 fn main() {
